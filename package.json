@@ -1,0 +1,65 @@
+{
+  "name": "smokeproof",
+  "version": "0.1.0",
+  "description": "Real-browser pre-ship verification for AI coding agents and humans. Catch silent runtime errors, broken mobile layouts, dead buttons, and leaked secrets before shipping.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "smokeproof": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/cli.js",
+    "mcp": "node dist/cli.js --mcp",
+    "test": "npm run build && npx tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js",
+    "test:unit": "npm run build && npx tsc -p tsconfig.test.json && node --test dist-test/test/unit.test.js",
+    "test:e2e": "npm run build && npx tsc -p tsconfig.test.json && node --test dist-test/test/e2e.test.js"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-skill",
+    "mcp",
+    "mcp-server",
+    "playwright",
+    "smoke-test",
+    "qa",
+    "browser-testing",
+    "claude-code",
+    "cursor",
+    "antigravity",
+    "pre-ship",
+    "devtools"
+  ],
+  "author": "md1qamar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/md1qamar/smokeproof.git"
+  },
+  "homepage": "https://github.com/md1qamar/smokeproof#readme",
+  "bugs": {
+    "url": "https://github.com/md1qamar/smokeproof/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "playwright-core": "^1.65.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
