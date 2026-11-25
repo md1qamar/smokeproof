@@ -1,18 +1,25 @@
 # SmokeProof
 
 **Real-browser pre-ship verification for AI coding agents and humans.**  
-Don't trust *"tsc passed"* — crawl your running app in headless Chromium, catch silent runtime bugs, mobile overflows, dead buttons, broken images, and leaked secrets, and get annotated screenshots + machine-readable JSON fixes.
+Don't trust *"tsc passed"* — crawl your running app in headless Chromium across Desktop (`1440x900`) and Mobile (`390x844`), catch silent runtime errors, HTTP `4xx`/`5xx` failures, mobile overflow, dead buttons, broken images, and leaked secrets, and get annotated screenshots + machine-readable JSON fixes.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
-[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-6366f1.svg)](#mcp-server-for-claude-code-cursor-antigravity--codex)
+[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-6366f1.svg)](#mcp-server-claude-code-cursor-antigravity--codex)
 [![Agent Skills Standard](https://img.shields.io/badge/Agent_Skills-SKILL.md-black.svg)](#install-as-an-agent-skill)
+
+![SmokeProof Desktop and Mobile Annotated Screenshot Preview](./docs/demo-preview.png)
 
 ---
 
-## Why SmokeProof?
+## Where & Why to Use SmokeProof
 
-AI coding agents are great at making code compile — and notorious for shipping broken runtime behavior:
+AI coding agents are great at making code compile — and notorious for shipping broken runtime behavior. Use SmokeProof whenever you want real-browser proof before calling a task "done":
+
+- **Before launching AI-built / vibe-coded apps:** Catch dead buttons, `[object Object]` UI leaks, missing images, console crashes, and broken `390px` mobile layouts that `tsc` and unit tests completely miss.
+- **Inside your coding agent loop (Claude Code, Cursor, Antigravity, Codex):** Let your agent call SmokeProof via Skill/MCP, inspect the annotated screenshots and JSON findings, fix the root causes, and re-run verification (`smokeproof_verify_fix`) automatically.
+- **On every Pull Request (CI gate):** Boot your app with `--cmd`, fail builds on `critical`/`high` regressions, and export Markdown PR summaries or GitHub Code Scanning `--sarif`.
+- **Instant pre-commit secret check (`--scan-only`):** Scan your codebase for committed `.env` files, client-exposed `NEXT_PUBLIC_*` / `VITE_*` secrets, `dangerouslySetInnerHTML`, and hardcoded `localhost` URLs without launching a browser.
 
 | What slips past `tsc` & unit tests | What SmokeProof catches in a real browser |
 | --- | --- |
@@ -27,29 +34,107 @@ AI coding agents are great at making code compile — and notorious for shipping
 
 ---
 
-## 10-Second Quickstart
+## Quickstart
 
-### 1. Audit any running URL
+### Option A: Run from Source (Recommended from GitHub)
+
 ```bash
-npx smokeproof http://localhost:3000
+git clone https://github.com/md1qamar/smokeproof.git
+cd smokeproof
+npm install
+npm run build
+
+# 1. Audit any already-running app
+node dist/cli.js http://localhost:3000
+
+# 2. Or auto-start another project's dev server, audit it, and shut it down cleanly
+node dist/cli.js --cmd "npm run dev" --cwd ../my-app http://localhost:3000 --scan-source
+
+# 3. Static secret & source hygiene scan only (no browser needed)
+node dist/cli.js --scan-only --cwd ../my-app
 ```
 
-### 2. Boot your dev server, audit, and tear down cleanly (Best for CI & Agents)
+> **Tip:** Run `npm link` once inside the cloned `smokeproof/` folder so you can run `smokeproof http://localhost:3000` directly from any project directory.
+
+### Option B: Run via `npx` (Once published to npm)
+
 ```bash
+npx smokeproof http://localhost:3000
 npx smokeproof --cmd "npm run dev" http://localhost:3000 --scan-source
 ```
 
-### 3. Machine-readable output for coding agents
+### Machine-Readable Formats & Saved Artifacts
+
 ```bash
-npx smokeproof http://localhost:3000 --json
-npx smokeproof http://localhost:3000 --markdown
-npx smokeproof http://localhost:3000 --sarif --out smokeproof.sarif
+smokeproof http://localhost:3000 --json
+smokeproof http://localhost:3000 --markdown
+smokeproof http://localhost:3000 --sarif --out smokeproof.sarif
 ```
 
-Outputs are also saved automatically to `.smokeproof/`:
-- `.smokeproof/smokeproof-report.json` — machine-readable findings & selectors
+Every run writes artifacts to `.smokeproof/`:
+- `.smokeproof/smokeproof-report.json` — machine-readable findings, selectors, and fix suggestions
 - `.smokeproof/smokeproof-report.html` — self-contained visual report with embedded screenshots
-- `.smokeproof/screenshots/*.png` — annotated screenshots highlighting exact failing bounding boxes
+- `.smokeproof/screenshots/*.png` — annotated PNGs highlighting exact failing bounding boxes
+
+---
+
+## Sample Output
+
+### Terminal Report
+
+```text
+SmokeProof v0.1.0   FAIL   Score: 0/100
+Target: http://127.0.0.1:63822/  | Browser: Google Chrome  | Duration: 3.17s
+Routes: 1  | Findings: 10 (2 critical, 5 high, 2 medium, 1 low)
+
+/ [HTTP 200, 2333ms] - 10 issue(s)
+  [HIGH] [desktop] Broken image failed to load: /assets/revenue-chart.png (asset/broken-image)
+         Selector: img
+         Fix: Verify the image URL/path exists in public assets and returns HTTP 200.
+  [HIGH] Serialized "[object Object]" rendered in UI: "Account tier: [object Object]" (content/object-object-leak)
+         Selector: div.muted
+         Fix: Replace placeholder text or handle missing/object state before rendering.
+  [MED ] Control "Export CSV" produced no observable UI, URL, attribute, or network change when clicked. (interaction/dead-control)
+         Selector: #export-btn
+         Fix: Wire up the onClick handler or mark disabled/informative if non-interactive.
+  [HIGH] [mobile] Horizontal overflow detected on mobile (788px content > 390px viewport). (layout/horizontal-overflow)
+         Selector: div.wide-table
+         Evidence: Offending elements: div.wide-table (+398px), strong (+113px), p.muted (+377px)
+         Fix: Apply max-w-full / overflow-x-hidden or fix fixed-width containers/tables exceeding viewport width.
+  [HIGH] Console error: Failed to hydrate billing telemetry widget (runtime/console-error)
+         Evidence: Failed to hydrate billing telemetry widget
+         Fix: Fix the root cause of the console.error before shipping.
+  [CRIT] Server returned HTTP 500 for GET /api/billing (network/http-5xx)
+         Evidence: 500 GET http://127.0.0.1:63822/api/billing
+         Fix: Fix the server error or unhandled exception on this API/route endpoint.
+  [CRIT] Exposed OpenAI / Provider Secret Key detected in live document response (/) (security/exposed-openai-key)
+         Evidence: Matched redacted value: sk-pro...7654
+         Fix: Move private credentials to server-side environment variables and rotate the exposed key immediately.
+```
+
+### JSON Output (`--json`)
+
+```json
+{
+  "summary": {
+    "score": 0,
+    "passed": false,
+    "routesAudited": 1,
+    "totalFindings": 10,
+    "bySeverity": { "critical": 2, "high": 5, "medium": 2, "low": 1 }
+  },
+  "sampleFindings": [
+    {
+      "severity": "high",
+      "rule": "asset/broken-image",
+      "viewport": "desktop",
+      "message": "Broken image failed to load: /assets/revenue-chart.png",
+      "selector": "img",
+      "suggestion": "Verify the image URL/path exists in public assets and returns HTTP 200."
+    }
+  ]
+}
+```
 
 ---
 
@@ -61,19 +146,28 @@ Compatible with **Claude Code**, **Cursor**, **Antigravity**, **Codex**, and **G
 npx skills add md1qamar/smokeproof
 ```
 
-Once installed, your agent knows to run static secret checks, crawl the live app, inspect annotated screenshots, fix root causes, and re-verify before reporting completion.
+Once installed, your agent automatically runs static secret checks, crawls the live app across desktop and mobile, inspects annotated screenshots, fixes root causes, and re-verifies before marking the task complete.
 
 ---
 
 ## MCP Server (Claude Code, Cursor, Antigravity, Codex)
 
-Start SmokeProof over stdio MCP:
+### Local Clone Config (Works immediately)
 
-```bash
-npx smokeproof --mcp
+Point your MCP client config (`claude_desktop_config.json`, `.cursor/mcp.json`, Antigravity MCP config, etc.) to your built `dist/cli.js`:
+
+```json
+{
+  "mcpServers": {
+    "smokeproof": {
+      "command": "node",
+      "args": ["/absolute/path/to/smokeproof/dist/cli.js", "--mcp"]
+    }
+  }
+}
 ```
 
-Add to your MCP config (`claude_desktop_config.json`, `.cursor/mcp.json`, etc.):
+### `npx` Config (Once published to npm)
 
 ```json
 {
@@ -153,12 +247,12 @@ console.log(`Score: ${report.summary.score}/100 (${report.summary.passed ? 'PASS
 Bootstrap configuration + CI workflow in one command:
 
 ```bash
-npx smokeproof --init
+smokeproof --init
 ```
 
 ---
 
-## Development
+## Development & Tests
 
 ```bash
 npm install
