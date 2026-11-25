@@ -47,6 +47,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     overrides: {
       include: [],
       exclude: [],
+      routes: [],
       ignoreRules: [],
     },
     help: false,
@@ -93,6 +94,20 @@ function parseCliArgs(argv: string[]): CliArgs {
         break;
       case '--strict':
         parsed.overrides.strict = true;
+        break;
+      case '--single':
+      case '--no-crawl':
+        parsed.overrides.maxPages = 1;
+        parsed.overrides.maxDepth = 0;
+        break;
+      case '--routes':
+        parsed.overrides.routes!.push(
+          ...requireValue(arg, next)
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        );
+        i++;
         break;
       case '--no-open':
         parsed.openBrowser = false;
@@ -222,6 +237,8 @@ Options:
   --strict                 Include strict a11y/SEO & localhost advisory checks
   --max-pages <n>          Maximum same-origin routes to crawl (default: 12)
   --max-depth <n>          Maximum link crawl depth (default: 2)
+  --single, --no-crawl     Audit only the exact URL provided without crawling links
+  --routes <r1,r2,...>     Audit only specific comma-separated routes (e.g. /pricing,/checkout)
   --timeout <ms>           Navigation/server startup timeout in ms (default: 15000)
   --no-mobile              Skip 390x844 mobile viewport layout audit
   --no-interact            Skip safe interactive button/tab probing

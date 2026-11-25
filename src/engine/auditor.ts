@@ -58,13 +58,23 @@ export async function runSmokeAudit(
     browserLabel = launched.browserLabel;
 
     const visited = new Set<string>();
-    const queue: QueueItem[] = [
-      {
-        url: startUrl.toString(),
-        route: normalizeRouteKey(startUrl),
-        depth: 0,
-      },
-    ];
+    const queue: QueueItem[] =
+      config.routes && config.routes.length > 0
+        ? config.routes.map((r) => {
+            const target = new URL(r, baseOrigin);
+            return {
+              url: target.toString(),
+              route: normalizeRouteKey(target),
+              depth: config.maxDepth, // Target exact listed routes without expanding links
+            };
+          })
+        : [
+            {
+              url: startUrl.toString(),
+              route: normalizeRouteKey(startUrl),
+              depth: 0,
+            },
+          ];
     const routes: RouteAuditResult[] = [];
     const ignoredRules = new Set<string>(config.ignoreRules);
 

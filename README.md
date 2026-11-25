@@ -68,8 +68,10 @@ node dist/cli.js demo --cmd "npm run dev" --cwd ../my-app http://localhost:3000
 # 3. Open Click-to-Prompt Visual Review Studio on a running app
 node dist/cli.js studio http://localhost:3000
 
-# 4. Standard high-signal audit (or add --strict for full a11y/SEO checks)
+# 4. Standard high-signal audit (or target one specific page with --single)
 node dist/cli.js http://localhost:3000
+node dist/cli.js http://localhost:3000/checkout --single
+node dist/cli.js http://localhost:3000 --routes /pricing,/checkout,/dashboard
 ```
 
 > **Tip:** Run `npm link` once inside the cloned `smokeproof/` folder so `smokeproof ...` works globally from any repository.
@@ -194,6 +196,8 @@ Flags:
   --strict                 Include strict a11y/SEO & localhost advisory checks
   --max-pages <n>          Maximum same-origin routes to crawl (default: 12)
   --max-depth <n>          Maximum link crawl depth (default: 2)
+  --single, --no-crawl     Audit only the exact URL provided without crawling links
+  --routes <r1,r2,...>     Audit only specific comma-separated routes (e.g. /pricing,/checkout)
   --timeout <ms>           Navigation/server startup timeout in ms (default: 15000)
   --no-mobile              Skip 390x844 mobile viewport layout audit
   --no-interact            Skip safe interactive button/tab probing

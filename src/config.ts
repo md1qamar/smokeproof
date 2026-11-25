@@ -18,6 +18,7 @@ export const DEFAULT_CONFIG: Omit<AuditConfig, 'url'> = {
   artifactsDir: '.smokeproof',
   include: [],
   exclude: [],
+  routes: [],
   ignoreRules: [],
   failOn: 'high',
   minScore: 70,

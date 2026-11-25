@@ -94,6 +94,7 @@ export interface AuditConfig {
   browserPath?: string;
   include: string[];
   exclude: string[];
+  routes: string[];
   ignoreRules: string[];
   failOn: Severity | 'none';
   minScore: number;

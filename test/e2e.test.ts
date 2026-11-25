@@ -38,6 +38,18 @@ test('E2E: clean route passes with 100 score and zero findings', async () => {
     assert.equal(report.summary.score, 100);
     assert.equal(report.summary.totalFindings, 0);
     assert.equal(report.routes.length, 1);
+
+    // Also verify explicit routes targeting without crawling extra pages
+    const customRoutesReport = await runSmokeAudit(fixture.baseUrl, {
+      routes: ['/clean', '/sub'],
+      artifactsDir,
+      screenshots: false,
+    });
+    assert.equal(customRoutesReport.summary.passed, true);
+    assert.deepEqual(
+      customRoutesReport.routes.map((r) => r.route),
+      ['/clean', '/sub'],
+    );
   } finally {
     fs.rmSync(artifactsDir, { recursive: true, force: true });
   }
