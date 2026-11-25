@@ -108,11 +108,16 @@ test('scanWorkspaceSource detects committed .env, client secrets, and hardcoded 
       `export const API_URL = "http://localhost:8080/api";\nexport const KEY = "${leaked}";\n`,
     );
 
-    const findings = scanWorkspaceSource(tmpDir);
-    const rules = new Set(findings.map((f) => f.rule));
-    assert.ok(rules.has('security/committed-env-file'));
-    assert.ok(rules.has('security/source-stripe-live-key') || rules.has('security/source-openai-key'));
-    assert.ok(rules.has('runtime/hardcoded-localhost'));
+    const strictFindings = scanWorkspaceSource(tmpDir, { strict: true });
+    const strictRules = new Set(strictFindings.map((f) => f.rule));
+    assert.ok(strictRules.has('security/committed-env-file'));
+    assert.ok(strictRules.has('security/source-stripe-live-key') || strictRules.has('security/source-openai-key'));
+    assert.ok(strictRules.has('runtime/hardcoded-localhost'));
+
+    const defaultFindings = scanWorkspaceSource(tmpDir);
+    const defaultRules = new Set(defaultFindings.map((f) => f.rule));
+    assert.ok(defaultRules.has('security/committed-env-file'));
+    assert.ok(!defaultRules.has('runtime/hardcoded-localhost'));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

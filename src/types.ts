@@ -6,6 +6,7 @@ export type FindingCategory =
   | 'layout'
   | 'asset'
   | 'interaction'
+  | 'chaos'
   | 'security'
   | 'a11y'
   | 'meta'
@@ -34,6 +35,7 @@ export interface Finding {
   suggestion: string;
   file?: string;
   line?: number;
+  reproGif?: string;
 }
 
 export interface RouteAuditResult {
@@ -47,6 +49,7 @@ export interface RouteAuditResult {
     desktop?: string;
     mobile?: string;
   };
+  reproGif?: string;
   discoveredLinks: string[];
 }
 
@@ -82,6 +85,8 @@ export interface AuditConfig {
   settleMs: number;
   mobile: boolean;
   interact: boolean;
+  chaos: boolean;
+  strict: boolean;
   maxInteractionsPerRoute: number;
   screenshots: boolean;
   scanSource: boolean;
@@ -93,6 +98,40 @@ export interface AuditConfig {
   failOn: Severity | 'none';
   minScore: number;
   headers: Record<string, string>;
+}
+
+export interface VisualAnnotation {
+  id: string;
+  route: string;
+  selector: string;
+  tagName: string;
+  textSnippet: string;
+  comment: string;
+  viewport: { width: number; height: number };
+  box?: BoundingBox;
+  recentErrors: string[];
+  screenshot?: string;
+  status: 'open' | 'resolved';
+  createdAt: string;
+}
+
+export interface DemoStep {
+  action: 'wait' | 'click' | 'type' | 'scroll' | 'goto';
+  selector?: string;
+  text?: string;
+  url?: string;
+  caption?: string;
+  zoom?: number;
+  holdMs?: number;
+}
+
+export interface DemoResult {
+  gifPath: string;
+  frameCount: number;
+  durationMs: number;
+  sizeBytes: number;
+  stepsExecuted: string[];
+  targetUrl: string;
 }
 
 export interface FixVerificationResult {

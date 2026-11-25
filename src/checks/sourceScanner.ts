@@ -43,7 +43,8 @@ const MAX_FILES = 600;
  * Perform a fast static pre-flight scan over workspace source files for exposed secrets,
  * committed `.env` credentials, unsafe HTML sinks, and hardcoded localhost API URLs.
  */
-export function scanWorkspaceSource(cwd: string): Finding[] {
+export function scanWorkspaceSource(cwd: string, options: { strict?: boolean } = {}): Finding[] {
+  const strict = Boolean(options.strict);
   const findings: Finding[] = [];
   const root = path.resolve(cwd);
   const files = collectFiles(root);
@@ -121,6 +122,7 @@ export function scanWorkspaceSource(cwd: string): Finding[] {
         }
 
         if (
+          strict &&
           /['"`]https?:\/\/(?:localhost|127\.0\.0\.1):\d+/.test(lineText) &&
           !/process\.env|import\.meta\.env/.test(lineText)
         ) {

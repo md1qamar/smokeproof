@@ -20,8 +20,10 @@ export async function runLayoutChecks(
   page: Page,
   route: string,
   viewport: ViewportName,
+  options: { strict?: boolean } = {},
 ): Promise<Finding[]> {
-  const rawSignals = await page.evaluate((vp: ViewportName) => {
+  const strict = Boolean(options.strict);
+  const rawSignals = await page.evaluate(({ vp, strictMode }: { vp: ViewportName; strictMode: boolean }) => {
     const signals: RawLayoutSignal[] = [];
 
     const getSelector = (el: Element): string => {
@@ -162,7 +164,7 @@ export async function runLayoutChecks(
       }
     }
 
-    if (vp === 'mobile') {
+    if (vp === 'mobile' && strictMode) {
       let tinyCount = 0;
       for (const item of rects) {
         const isInlineTextLink =
@@ -186,7 +188,7 @@ export async function runLayoutChecks(
     }
 
     return signals;
-  }, viewport);
+  }, { vp: viewport, strictMode: strict });
 
   return rawSignals.map((sig, idx) => ({
     id: `layout-${viewport}-${route}-${idx + 1}`,

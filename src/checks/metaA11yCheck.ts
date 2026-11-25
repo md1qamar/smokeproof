@@ -16,11 +16,16 @@ interface RawMetaFinding {
  * Audit essential ship metadata, core accessibility labels, and accidentally rendered
  * placeholder or template crash text (`[object Object]`, `NaN`, `Lorem ipsum`).
  */
-export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
+export async function runMetaAndA11yChecks(
+  page: Page,
+  route: string,
+  options: { strict?: boolean } = {},
+): Promise<{
   title: string;
   findings: Finding[];
 }> {
-  const result = await page.evaluate(() => {
+  const strict = Boolean(options.strict);
+  const result = await page.evaluate((strictMode: boolean) => {
     const findings: RawMetaFinding[] = [];
 
     const getSelector = (el: Element): string => {
@@ -69,7 +74,7 @@ export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
       });
     }
 
-    if (!document.documentElement.getAttribute('lang')) {
+    if (strictMode && !document.documentElement.getAttribute('lang')) {
       findings.push({
         rule: 'a11y/missing-lang',
         category: 'a11y',
@@ -80,7 +85,7 @@ export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
     }
 
     const h1s = Array.from(document.querySelectorAll('h1')).filter((h) => h.textContent?.trim());
-    if (h1s.length === 0) {
+    if (strictMode && h1s.length === 0) {
       findings.push({
         rule: 'a11y/missing-h1',
         category: 'a11y',
@@ -123,13 +128,14 @@ export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
       const hasForLabel = id ? Boolean(document.querySelector(`label[for="${CSS.escape(id)}"]`)) : false;
       const hasParentLabel = Boolean(inp.closest('label'));
       const hasAria = Boolean(inp.getAttribute('aria-label') || inp.getAttribute('aria-labelledby'));
-      if (!hasForLabel && !hasParentLabel && !hasAria) {
+      const hasPlaceholder = Boolean(inp.getAttribute('placeholder')?.trim());
+      if (!hasForLabel && !hasParentLabel && !hasAria && (strictMode || !hasPlaceholder)) {
         unlabeledInputCount++;
         if (unlabeledInputCount <= 3) {
           findings.push({
             rule: 'a11y/unlabeled-input',
             category: 'a11y',
-            severity: 'medium',
+            severity: hasPlaceholder ? 'low' : 'medium',
             message: `Form field missing <label> or aria-label: ${getSelector(inp)}`,
             selector: getSelector(inp),
             box: toBox(inp.getBoundingClientRect()),
@@ -139,10 +145,12 @@ export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
       }
     }
 
-    // Check images missing alt
-    const imgsMissingAlt = Array.from(document.querySelectorAll('img')).filter(
-      (img) => isVisible(img) && img.getAttribute('alt') === null,
-    );
+    // Check images missing alt (strict mode only so unstyled decorative drafts do not create noise)
+    const imgsMissingAlt = strictMode
+      ? Array.from(document.querySelectorAll('img')).filter(
+          (img) => isVisible(img) && img.getAttribute('alt') === null,
+        )
+      : [];
     if (imgsMissingAlt.length > 0) {
       const first = imgsMissingAlt[0];
       findings.push({
@@ -211,7 +219,7 @@ export async function runMetaAndA11yChecks(page: Page, route: string): Promise<{
     }
 
     return { title, findings };
-  });
+  }, strict);
 
   return {
     title: result.title,

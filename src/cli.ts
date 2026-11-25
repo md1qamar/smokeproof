@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { scanWorkspaceSource } from './checks/sourceScanner.js';
+import { recordProductDemo } from './demo/gifStudio.js';
 import { TOOL_VERSION, runSmokeAudit } from './engine/auditor.js';
 import { startMcpServer } from './mcp/server.js';
 import {
@@ -12,13 +13,19 @@ import {
   formatTerminalReport,
 } from './report/formatters.js';
 import { computeAuditSummary } from './report/scorer.js';
+import { startVisualStudio } from './studio/studioServer.js';
 import type { AuditConfig, AuditReport, Severity } from './types.js';
 
+type Mode = 'audit' | 'chaos' | 'demo' | 'studio';
+
 interface CliArgs {
+  mode: Mode;
   url: string;
   mcp: boolean;
   init: boolean;
   scanOnly: boolean;
+  openBrowser: boolean;
+  studioPort?: number;
   format: 'terminal' | 'json' | 'markdown' | 'sarif' | 'html';
   out?: string;
   overrides: Partial<AuditConfig>;
@@ -26,12 +33,16 @@ interface CliArgs {
   version: boolean;
 }
 
+const SUBCOMMANDS = new Set<string>(['audit', 'chaos', 'demo', 'studio']);
+
 function parseCliArgs(argv: string[]): CliArgs {
   const parsed: CliArgs = {
+    mode: 'audit',
     url: '',
     mcp: false,
     init: false,
     scanOnly: false,
+    openBrowser: true,
     format: 'terminal',
     overrides: {
       include: [],
@@ -45,6 +56,12 @@ function parseCliArgs(argv: string[]): CliArgs {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = argv[i + 1];
+
+    if (i === 0 && SUBCOMMANDS.has(arg)) {
+      parsed.mode = arg as Mode;
+      if (arg === 'chaos') parsed.overrides.chaos = true;
+      continue;
+    }
 
     switch (arg) {
       case '-h':
@@ -63,6 +80,26 @@ function parseCliArgs(argv: string[]): CliArgs {
         break;
       case '--scan-only':
         parsed.scanOnly = true;
+        break;
+      case '--chaos':
+        parsed.mode = 'chaos';
+        parsed.overrides.chaos = true;
+        break;
+      case '--demo':
+        parsed.mode = 'demo';
+        break;
+      case '--studio':
+        parsed.mode = 'studio';
+        break;
+      case '--strict':
+        parsed.overrides.strict = true;
+        break;
+      case '--no-open':
+        parsed.openBrowser = false;
+        break;
+      case '--port':
+        parsed.studioPort = Number(requireValue(arg, next));
+        i++;
         break;
       case '--json':
         parsed.format = 'json';
@@ -167,18 +204,22 @@ function requireValue(flag: string, value: string | undefined): string {
 
 function printHelp(): void {
   console.log(`
-SmokeProof v${TOOL_VERSION} — Real-Browser Pre-Ship Verification for AI Agents & Humans
+SmokeProof v${TOOL_VERSION} — Chaos Browser Testing, Demo/Repro GIFs & Visual Review Studio
 
 Usage:
-  smokeproof <url> [options]
-  smokeproof --cmd "npm run dev" http://localhost:3000 [options]
-  smokeproof --scan-only [--cwd <dir>]
-  smokeproof --mcp
-  smokeproof --init
+  smokeproof <url> [options]                  Crawl & verify runtime, layout, secrets & clicks
+  smokeproof chaos <url> [options]            Fuzz forms, XSS, double-clicks & offline + Repro GIF
+  smokeproof demo <url> [options]             Record Screen-Studio walkthrough GIF (zero FFmpeg)
+  smokeproof studio <url> [options]           Open Click-to-Prompt Visual Review Studio
+  smokeproof --scan-only [--cwd <dir>]        Static workspace secret/.env scan
+  smokeproof --mcp                            Start MCP server for Claude Code / Cursor / Antigravity
+  smokeproof --init                           Create .smokeproof.json & GitHub Actions workflow
 
 Options:
-  --cmd <command>          Start dev/preview server and shut down cleanly after audit
+  --cmd <command>          Start dev/preview server and shut down cleanly afterward
   --cwd <dir>              Target workspace directory (default: .)
+  --chaos                  Enable chaos form fuzzing, double-click & offline probes
+  --strict                 Include strict a11y/SEO & localhost advisory checks
   --max-pages <n>          Maximum same-origin routes to crawl (default: 12)
   --max-depth <n>          Maximum link crawl depth (default: 2)
   --timeout <ms>           Navigation/server startup timeout in ms (default: 15000)
@@ -186,27 +227,19 @@ Options:
   --no-interact            Skip safe interactive button/tab probing
   --no-screenshots         Skip saving annotated PNG screenshots
   --scan-source            Include static workspace secret/.env scan
-  --scan-only              Run static workspace scan only (no browser launch)
   --fail-on <level>        critical | high | medium | low | none (default: high)
   --min-score <0-100>      Minimum passing ship score (default: 70)
-  --json                   Output machine-readable JSON
-  --markdown               Output Markdown report
-  --sarif                  Output SARIF v2.1.0 JSON
-  --html                   Output self-contained HTML report
-  --out <path>             Write formatted output to a file
-  --artifacts-dir <dir>    Directory for screenshots & reports (default: .smokeproof)
+  --json | --markdown | --sarif | --html
+  --out <path>             Write report or Demo GIF to custom file path
+  --artifacts-dir <dir>    Directory for screenshots, GIFs & reports (default: .smokeproof)
   --browser-path <path>    Explicit Chrome/Edge/Chromium executable path
-  --include <pattern>      Only crawl matching routes (repeatable)
-  --exclude <pattern>      Skip matching routes (repeatable)
-  --ignore-rule <ruleId>   Suppress a specific rule ID (repeatable)
-  --mcp                    Start stdio MCP server for Claude Code / Cursor / Antigravity
-  --init                   Create .smokeproof.json and GitHub Actions workflow template
-  -v, --version            Show version
-  -h, --help               Show help
+  --port <port>            Studio UI port (default: 4180)
+  --no-open                Do not auto-open browser in studio mode
 
 Examples:
-  npx smokeproof http://localhost:3000
-  npx smokeproof --cmd "npm run preview" http://localhost:4173 --json
+  npx smokeproof demo --cmd "npm run dev" http://localhost:3000
+  npx smokeproof chaos http://localhost:3000
+  npx smokeproof studio http://localhost:3000
   npx smokeproof --mcp
 `);
 }
@@ -222,6 +255,8 @@ function runInit(cwd: string): void {
           maxPages: 12,
           mobile: true,
           interact: true,
+          chaos: false,
+          strict: false,
           scanSource: true,
           failOn: 'high',
           minScore: 75,
@@ -259,9 +294,9 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
-      - name: Run SmokeProof
-        run: npx smokeproof --cmd "npm run preview -- --port 4173" http://localhost:4173 --scan-source --sarif --out smokeproof.sarif
-      - name: Upload Screenshots & HTML Report
+      - name: Run SmokeProof Chaos Gate
+        run: npx smokeproof chaos --cmd "npm run preview -- --port 4173" http://localhost:4173 --scan-source --sarif --out smokeproof.sarif
+      - name: Upload Screenshots, Repro GIFs & HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -301,12 +336,74 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  const cwd = path.resolve(args.overrides.cwd ?? process.cwd());
+
+  if (args.mode === 'demo') {
+    if (!args.url) {
+      console.error('Error: Provide a target URL (e.g. smokeproof demo http://localhost:3000).');
+      process.exit(2);
+    }
+    try {
+      const result = await recordProductDemo({
+        url: args.url,
+        cmd: args.overrides.cmd,
+        cwd,
+        outPath: args.out,
+        artifactsDir: args.overrides.artifactsDir,
+        browserPath: args.overrides.browserPath,
+        timeoutMs: args.overrides.timeoutMs,
+      });
+      if (args.format === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(`\nSmokeProof Demo GIF recorded!`);
+        console.log(`  Output: ${result.gifPath} (${Math.round(result.sizeBytes / 1024)} KB, ${result.frameCount} frames)`);
+        console.log(`  Steps:  ${result.stepsExecuted.join(' -> ')}\n`);
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(`Demo recording failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(2);
+    }
+  }
+
+  if (args.mode === 'studio') {
+    if (!args.url) {
+      console.error('Error: Provide a target URL (e.g. smokeproof studio http://localhost:3000).');
+      process.exit(2);
+    }
+    try {
+      const studio = await startVisualStudio({
+        url: args.url,
+        cmd: args.overrides.cmd,
+        cwd,
+        port: args.studioPort,
+        artifactsDir: args.overrides.artifactsDir,
+        browserPath: args.overrides.browserPath,
+        open: args.openBrowser,
+      });
+      console.log(`\nSmokeProof Visual Review Studio running!`);
+      console.log(`  Studio UI:  ${studio.studioUrl}`);
+      console.log(`  App Proxy:  ${studio.proxyUrl} -> ${studio.targetUrl}`);
+      console.log(`  Press Ctrl+C to stop.\n`);
+      const shutdown = async () => {
+        await studio.stop();
+        process.exit(0);
+      };
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+      return;
+    } catch (err) {
+      console.error(`Studio failed to start: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(2);
+    }
+  }
+
   let report: AuditReport;
   try {
     if (args.scanOnly) {
-      const cwd = path.resolve(args.overrides.cwd ?? process.cwd());
       const start = Date.now();
-      const sourceFindings = scanWorkspaceSource(cwd);
+      const sourceFindings = scanWorkspaceSource(cwd, { strict: args.overrides.strict });
       const summary = computeAuditSummary(
         [],
         sourceFindings,
@@ -327,7 +424,7 @@ async function main(): Promise<void> {
         sourceFindings,
       };
     } else {
-      if (!args.url && !fs.existsSync(path.join(path.resolve(args.overrides.cwd ?? process.cwd()), '.smokeproof.json'))) {
+      if (!args.url && !fs.existsSync(path.join(cwd, '.smokeproof.json'))) {
         console.error('Error: Provide a target URL (e.g. smokeproof http://localhost:3000) or --scan-only.');
         process.exit(2);
       }

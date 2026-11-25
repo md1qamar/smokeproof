@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { Browser, Page } from 'playwright-core';
 import { launchAuditBrowser } from '../browser/resolver.js';
+import { runChaosProbes } from '../checks/chaosCheck.js';
 import { runSafeInteractionProbes } from '../checks/interactionCheck.js';
 import { runLayoutChecks } from '../checks/layoutCheck.js';
 import { runMetaAndA11yChecks } from '../checks/metaA11yCheck.js';
@@ -20,7 +21,7 @@ import type {
   RouteAuditResult,
 } from '../types.js';
 
-export const TOOL_VERSION = '0.1.0';
+export const TOOL_VERSION = '0.2.0';
 
 const SKIP_BINARY_EXT_PATTERN =
   /\.(?:png|jpe?g|gif|webp|svg|ico|pdf|zip|tar|gz|mp4|webm|mp3|woff2?|ttf|eot)$/i;
@@ -94,7 +95,7 @@ export async function runSmokeAudit(
     }
 
     const sourceFindings = config.scanSource
-      ? scanWorkspaceSource(config.cwd).filter((f) => !ignoredRules.has(f.rule))
+      ? scanWorkspaceSource(config.cwd, { strict: config.strict }).filter((f) => !ignoredRules.has(f.rule))
       : [];
 
     const durationMs = Date.now() - startedAt;
@@ -199,6 +200,7 @@ async function auditSingleRoute(
   let status: number | null = null;
   let title = '';
   let discoveredLinks: string[] = [];
+  let reproGif: string | undefined;
   const navStart = Date.now();
 
   try {
@@ -237,25 +239,22 @@ async function auditSingleRoute(
     }
 
     discoveredLinks = await extractSameOriginLinks(page, baseOrigin);
-    const desktopLayout = await runLayoutChecks(page, route, 'desktop');
-    const metaA11y = await runMetaAndA11yChecks(page, route);
+
+    // Run clean-state layout + meta/a11y checks BEFORE interactive probes open modals or drawers
+    const desktopLayout = await runLayoutChecks(page, route, 'desktop', { strict: config.strict });
+    const metaA11y = await runMetaAndA11yChecks(page, route, { strict: config.strict });
     title = metaA11y.title;
+    routeFindings.push(...desktopLayout, ...metaA11y.findings);
 
-    const interactionFindings = config.interact
-      ? await runSafeInteractionProbes(page, route, collector, config.maxInteractionsPerRoute)
-      : [];
-
-    routeFindings.push(...desktopLayout, ...metaA11y.findings, ...interactionFindings);
-
-    const desktopPreMerge = [...routeFindings, ...collector.getFindings()].filter(
+    const desktopPreInteract = [...routeFindings, ...collector.getFindings()].filter(
       (f) => !ignoredRules.has(f.rule),
     );
-    if (config.screenshots && (desktopPreMerge.length > 0 || route === '/')) {
+    if (config.screenshots && (desktopPreInteract.length > 0 || route === '/')) {
       screenshots.desktop = await captureAnnotatedScreenshot(
         page,
         route,
         'desktop',
-        desktopPreMerge,
+        desktopPreInteract,
         config.artifactsDir,
       );
     }
@@ -263,7 +262,7 @@ async function auditSingleRoute(
     if (config.mobile) {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(250);
-      const mobileFindings = await runLayoutChecks(page, route, 'mobile');
+      const mobileFindings = await runLayoutChecks(page, route, 'mobile', { strict: config.strict });
       routeFindings.push(...mobileFindings);
 
       const mobileOnly = mobileFindings.filter((f) => !ignoredRules.has(f.rule));
@@ -276,6 +275,31 @@ async function auditSingleRoute(
           config.artifactsDir,
         );
       }
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForTimeout(150);
+    }
+
+    if (config.interact) {
+      const interactionFindings = await runSafeInteractionProbes(
+        page,
+        route,
+        collector,
+        config.maxInteractionsPerRoute,
+      );
+      routeFindings.push(...interactionFindings);
+    }
+
+    if (config.chaos) {
+      const chaosRes = await runChaosProbes(
+        page,
+        context,
+        browser,
+        route,
+        collector,
+        config.artifactsDir,
+      );
+      routeFindings.push(...chaosRes.findings);
+      if (chaosRes.reproGif) reproGif = chaosRes.reproGif;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -306,6 +330,7 @@ async function auditSingleRoute(
     title,
     findings: merged,
     screenshots,
+    ...(reproGif ? { reproGif } : {}),
     discoveredLinks,
   };
 }

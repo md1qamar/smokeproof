@@ -100,6 +100,43 @@ export async function startBrokenFixtureServer(): Promise<TestServerHandle> {
       return;
     }
 
+    if (reqPath === '/chaos-target') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chaos Target</title>
+</head>
+<body>
+  <h1>Feedback Form</h1>
+  <form id="f">
+    <input id="msg" type="text" aria-label="Message" />
+    <button type="submit">Send</button>
+  </form>
+  <button id="dbl-btn" type="button">Rapid Action</button>
+  <div id="preview"></div>
+  <script>
+    document.getElementById('f').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = document.getElementById('msg').value;
+      if (val.length > 500) {
+        throw new Error('Payload too huge for client state');
+      }
+      document.getElementById('preview').innerHTML = val;
+    });
+    let clicks = 0;
+    document.getElementById('dbl-btn').addEventListener('click', () => {
+      clicks++;
+      if (clicks >= 2) throw new Error('Duplicate rapid click crash');
+    });
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
     if (reqPath === '/broken') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!DOCTYPE html>

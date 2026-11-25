@@ -10,6 +10,8 @@ export const DEFAULT_CONFIG: Omit<AuditConfig, 'url'> = {
   settleMs: 500,
   mobile: true,
   interact: true,
+  chaos: false,
+  strict: false,
   maxInteractionsPerRoute: 6,
   screenshots: true,
   scanSource: false,

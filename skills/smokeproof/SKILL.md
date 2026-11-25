@@ -1,50 +1,50 @@
 ---
 name: smokeproof
-description: Real-browser pre-ship verification skill for AI coding agents. Use before declaring any web app task complete, after fixing UI/API bugs, or when auditing localhost/staging apps for console errors, HTTP 4xx/5xx failures, mobile horizontal overflow, broken images, dead buttons, unlabeled controls, and exposed client secrets.
+description: Real-browser chaos testing, Screen-Studio demo & bug-repro GIF recording, and click-to-prompt visual review skill for AI coding agents. Use before declaring any web app task complete, when fuzzing forms/flows, when creating README demo GIFs, or when checking visual review annotations left by the user.
 license: MIT
 compatibility: "Requires Node.js >= 20 and Chrome, Edge, or Playwright Chromium."
 ---
 
-# SmokeProof — Pre-Ship Browser Verification Protocol
+# SmokeProof — Chaos Testing, Repro GIFs & Visual Review Protocol
 
-Never mark a web application task "done" solely because `tsc`, linting, or build succeeded. Run SmokeProof against the real running app to verify runtime behavior in Chromium across Desktop (`1440x900`) and Mobile (`390x844`) viewports.
+Never mark a web application task "done" solely because `tsc`, linting, or build succeeded. Use SmokeProof to verify real-browser behavior, inspect visual review annotations, chaos-test user inputs, and generate shareable Screen-Studio demo GIFs.
 
 ## When to Trigger This Skill
 
 - Before reporting a frontend, full-stack, or UI feature as finished
-- After refactoring routing, layouts, forms, auth gates, or API handlers
-- When debugging visual overflow, blank screens, broken assets, or unresponsive buttons
-- Before opening a PR or deploying to production
+- When the user asks to inspect, stress-test, or chaos-test forms, APIs, and offline behavior
+- When the user created click-to-prompt visual pins in **SmokeProof Studio** (`smokeproof studio`)
+- When the user wants a Screen-Studio-style README or launch **Demo GIF** (`smokeproof demo`)
 
 ## Workflow
 
-### Phase 1: Static Pre-Flight Scan (Zero Browser Startup)
+### Phase 1: Check Visual Review Annotations (If User Left Pins)
 
-Run the static source scanner first to catch exposed `.env` files, leaked API keys, unsafe `dangerouslySetInnerHTML`, or hardcoded `localhost` API calls:
+Check if the user annotated elements in SmokeProof Studio:
+- **MCP:** `smokeproof_get_annotations`
+- After fixing each pinned selector, mark it resolved with `smokeproof_resolve_annotation`.
 
-- **MCP:** call `smokeproof_scan_source` with `{ "cwd": "." }`
+### Phase 2: Static Pre-Flight Scan
+
+Catch exposed `.env` files, leaked API keys, or unsafe HTML sinks instantly:
+- **MCP:** `smokeproof_scan_source`
 - **CLI:** `npx smokeproof --scan-only --json`
 
-Fix any `critical` or `high` secret exposure immediately before continuing.
+### Phase 3: Real-Browser Audit & Chaos Bug-Breaker
 
-### Phase 2: Real-Browser Runtime & Layout Crawl
+Run SmokeProof against the running app or wrap the dev server command:
+- **Standard audit:** `smokeproof_audit` or `npx smokeproof --cmd "npm run dev" http://localhost:3000 --json`
+- **Chaos mode (form fuzzing, XSS canary, double-click race, offline resilience + animated Repro GIF):**
+  `smokeproof_chaos_test` or `npx smokeproof chaos --cmd "npm run dev" http://localhost:3000 --json`
 
-Run SmokeProof against either an already-running local server or let SmokeProof launch and tear down the app command automatically:
+### Phase 4: Fix & Re-Verify Diff
 
-- **MCP:** call `smokeproof_audit` with `{ "url": "http://localhost:3000", "cmd": "npm run dev", "mobile": true, "interact": true, "screenshots": true }`
-- **CLI:** `npx smokeproof --cmd "npm run dev" http://localhost:3000 --scan-source --json`
+1. Inspect any generated annotated screenshots (`.smokeproof/screenshots/`) or Repro GIFs (`.smokeproof/repro/`).
+2. Fix root causes cleanly. See `references/severity-contract.md` for rule definitions.
+3. Call `smokeproof_verify_fix` until `summary.passed === true`.
 
-### Phase 3: Triage Findings & Inspect Annotated Screenshots
+### Phase 5: Optional README / Launch Demo GIF
 
-1. Sort findings by severity: `critical` -> `high` -> `medium` -> `low`.
-2. When `screenshots` is enabled, inspect the generated PNGs in `.smokeproof/screenshots/` (each failing selector is highlighted with a numbered dashed box).
-3. Address root causes in source code rather than suppressing rules. See `references/severity-contract.md` for rule definitions and fix guidance.
-
-### Phase 4: Re-Verify Fix Diff
-
-After applying code edits, verify that targeted issues are resolved and no regressions were introduced:
-
-- **MCP:** call `smokeproof_verify_fix` with `{ "url": "http://localhost:3000" }`
-- **CLI:** `npx smokeproof --cmd "npm run dev" http://localhost:3000 --json`
-
-Only report success to the user once `summary.passed === true` (zero `critical`/`high` runtime defects and `score >= 70`).
+Generate a crisp Screen-Studio-style walkthrough GIF (macOS chrome, smooth cursor zoom, click ripples, captions):
+- **MCP:** `smokeproof_record_demo`
+- **CLI:** `npx smokeproof demo --cmd "npm run dev" http://localhost:3000`

@@ -63,6 +63,9 @@ export function formatTerminalReport(report: AuditReport, useColor = process.std
       const shots = [r.screenshots.desktop, r.screenshots.mobile].filter(Boolean).join(' , ');
       lines.push(`  ${c(ANSI.dim, `Screenshots: ${shots}`)}`);
     }
+    if (r.reproGif) {
+      lines.push(`  ${c(ANSI.magenta, `Repro GIF: ${r.reproGif}`)}`);
+    }
     lines.push('');
   }
 
@@ -178,6 +181,7 @@ export function formatHtmlReport(report: AuditReport): string {
     .map((r) => {
       const desktopImg = fileToDataUri(r.screenshots.desktop);
       const mobileImg = fileToDataUri(r.screenshots.mobile);
+      const reproGifImg = fileToDataUri(r.reproGif, 'image/gif');
       const itemsHtml = r.findings.length
         ? r.findings.map((f) => renderFindingCard(f)).join('\n')
         : '<div class="ok">All browser checks passed on this route.</div>';
@@ -193,8 +197,9 @@ export function formatHtmlReport(report: AuditReport): string {
         </div>
         <div class="findings-list">${itemsHtml}</div>
         ${
-          desktopImg || mobileImg
+          desktopImg || mobileImg || reproGifImg
             ? `<div class="shots">
+                ${reproGifImg ? `<figure><figcaption>Chaos / Bug Repro GIF</figcaption><img src="${reproGifImg}" alt="Repro GIF for ${escapeHtml(r.route)}" /></figure>` : ''}
                 ${desktopImg ? `<figure><figcaption>Desktop (1440x900)</figcaption><img src="${desktopImg}" alt="Desktop screenshot for ${escapeHtml(r.route)}" /></figure>` : ''}
                 ${mobileImg ? `<figure><figcaption>Mobile (390x844)</figcaption><img src="${mobileImg}" alt="Mobile screenshot for ${escapeHtml(r.route)}" /></figure>` : ''}
                </div>`
@@ -292,11 +297,11 @@ function renderFindingCard(f: Finding): string {
   </div>`;
 }
 
-function fileToDataUri(filePath?: string): string | null {
+function fileToDataUri(filePath?: string, mime = 'image/png'): string | null {
   if (!filePath || !fs.existsSync(filePath)) return null;
   try {
     const b64 = fs.readFileSync(filePath).toString('base64');
-    return `data:image/png;base64,${b64}`;
+    return `data:${mime};base64,${b64}`;
   } catch {
     return null;
   }

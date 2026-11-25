@@ -1,12 +1,40 @@
 # SmokeProof
 
-**Real-browser pre-ship verification for AI coding agents and humans.**  
-Don't trust *"tsc passed"* — crawl your running app in headless Chromium across Desktop (`1440x900`) and Mobile (`390x844`), catch silent runtime errors, HTTP `4xx`/`5xx` failures, mobile overflow, dead buttons, broken images, and leaked secrets, and get annotated screenshots + machine-readable JSON fixes.
+**Break your app before users do — Chaos Browser Testing, Screen-Studio Demo & Bug-Repro GIFs, and Click-to-Prompt Visual Review for AI Coding Agents.**
+
+Zero cloud. Zero API keys. Zero FFmpeg setup. Runs locally on your existing **Chrome**, **Edge**, or **Chromium**.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
-[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-6366f1.svg)](#mcp-server-claude-code-cursor-antigravity--codex)
+[![MCP Compatible](https://img.shields.io/badge/MCP-8_tools-6366f1.svg)](#mcp-server-8-tools)
 [![Agent Skills Standard](https://img.shields.io/badge/Agent_Skills-SKILL.md-black.svg)](#install-as-an-agent-skill)
+
+![SmokeProof Screen-Studio Demo GIF](./docs/demo-walkthrough.gif)
+
+*Walkthrough GIF above recorded locally by `smokeproof demo` (`gifenc` + Chromium Canvas, zero FFmpeg).*
+
+---
+
+## 3 Things SmokeProof Does Better Than Anyone Else
+
+### 1. Chaos Bug-Breaker + Animated Repro GIFs (`smokeproof chaos`)
+Skip boring static checklists. SmokeProof actively **attacks your running app** in headless Chromium:
+- **Form & Input Fuzzing:** Submits empty inputs, 1800-char emoji strings, and harmless XSS canaries (`<img src=x onerror=...>`).
+- **Double-Click Race & Offline Crash Checks:** Double-clicks primary actions and drops network connectivity to catch unhandled crashes.
+- **Runtime, Mobile Overflow & Secret Leaks:** Intercepts `console.error`, uncaught exceptions, HTTP `4xx`/`5xx`, broken images, mobile `390px` horizontal overflow, and leaked API keys (`sk-`, `ghp_`, `AKIA`, DB URIs — auto-redacted).
+- **Animated Bug-Repro GIF:** Whenever chaos mode catches a crash, it automatically renders a zoomed `.smokeproof/repro/chaos-*.gif` showing the exact action -> failure.
+
+### 2. Screen-Studio Demo & README GIFs in 1 Command (`smokeproof demo`)
+Point SmokeProof at any running app and generate a **Shareable Product Walkthrough GIF**:
+- Wraps your app in a sleek **dark macOS window bezel** with URL pill.
+- Smoothly moves an animated cursor, applies **cubic-eased camera zoom** + **click ripples**, and adds **floating step caption pills**.
+- Pure JS + Chromium Canvas (`gifenc`) — **no FFmpeg, no cloud upload**.
+
+### 3. Click-to-Prompt Visual Review Studio (`smokeproof studio`)
+Review AI-built UI right against your live running app:
+- Opens a local split-pane Studio (`http://127.0.0.1:4180`) proxying your live app cleanly (supports Vite/Next HMR).
+- Toggle **Pin Element** -> click any button/card -> type *"Fix mobile padding"* -> saves exact **CSS selector + viewport + recent console/network errors** into `.smokeproof/annotations.json`.
+- Copy a 1-click **Agent Fix Prompt**, or let Claude Code / Cursor / Antigravity pull pins directly via MCP (`smokeproof_get_annotations`).
 
 ![SmokeProof Desktop and Mobile Annotated Screenshot Preview](./docs/demo-preview.png)
 
@@ -14,23 +42,10 @@ Don't trust *"tsc passed"* — crawl your running app in headless Chromium acros
 
 ## Where & Why to Use SmokeProof
 
-AI coding agents are great at making code compile — and notorious for shipping broken runtime behavior. Use SmokeProof whenever you want real-browser proof before calling a task "done":
-
-- **Before launching AI-built / vibe-coded apps:** Catch dead buttons, `[object Object]` UI leaks, missing images, console crashes, and broken `390px` mobile layouts that `tsc` and unit tests completely miss.
-- **Inside your coding agent loop (Claude Code, Cursor, Antigravity, Codex):** Let your agent call SmokeProof via Skill/MCP, inspect the annotated screenshots and JSON findings, fix the root causes, and re-run verification (`smokeproof_verify_fix`) automatically.
-- **On every Pull Request (CI gate):** Boot your app with `--cmd`, fail builds on `critical`/`high` regressions, and export Markdown PR summaries or GitHub Code Scanning `--sarif`.
-- **Instant pre-commit secret check (`--scan-only`):** Scan your codebase for committed `.env` files, client-exposed `NEXT_PUBLIC_*` / `VITE_*` secrets, `dangerouslySetInnerHTML`, and hardcoded `localhost` URLs without launching a browser.
-
-| What slips past `tsc` & unit tests | What SmokeProof catches in a real browser |
-| --- | --- |
-| Silent `console.error` & uncaught exceptions | Captures `pageerror`, `console.error`, and framework hydration warnings |
-| Broken API endpoints (`4xx` / `5xx`) | Intercepts failed XHR/fetch/asset requests with status & route evidence |
-| Mobile layout explosions | Audits both `1440x900` desktop and `390x844` mobile for horizontal overflow & overlapping controls |
-| Dead buttons with empty handlers | Safely probes non-destructive buttons/tabs (`--interact`) and detects throws or zero-effect clicks |
-| Leaked API keys in client bundles | Scans live JS/SSR responses & `.env` files for `sk-`, `ghp_`, `AKIA`, DB URIs (auto-redacted) |
-| `[object Object]`, `NaN`, `Lorem ipsum` | Detects broken template rendering and missing `<title>`, `<meta viewport>`, labels, and `alt` text |
-
-**Zero forced 300 MB browser download:** SmokeProof automatically detects your existing **Google Chrome**, **Microsoft Edge**, **Brave**, or **Playwright Chromium** installation.
+- **Before shipping AI-built / vibe-coded apps:** Catch dead buttons, `[object Object]` UI leaks, broken images, console crashes, and mobile overflow that `tsc` never catches.
+- **Inside your coding agent loop:** Let Claude Code, Cursor, Antigravity, or Codex run `smokeproof_chaos_test` / `smokeproof_audit`, inspect screenshots & pins, fix bugs, and re-verify via `smokeproof_verify_fix`.
+- **For GitHub README & launch posts:** Generate clean zoomed walkthrough GIFs in seconds with `smokeproof demo`.
+- **In CI & pre-commit checks:** Run `--cmd "npm run preview" --fail-on high --sarif` on PRs, or `--scan-only` to catch committed `.env` / client-exposed keys without launching a browser.
 
 ---
 
@@ -44,43 +59,40 @@ cd smokeproof
 npm install
 npm run build
 
-# 1. Audit any already-running app
+# 1. Chaos-test another local app & wrap its dev server automatically
+node dist/cli.js chaos --cmd "npm run dev" --cwd ../my-app http://localhost:3000 --scan-source
+
+# 2. Record a Screen-Studio walkthrough GIF for your README / launch post
+node dist/cli.js demo --cmd "npm run dev" --cwd ../my-app http://localhost:3000
+
+# 3. Open Click-to-Prompt Visual Review Studio on a running app
+node dist/cli.js studio http://localhost:3000
+
+# 4. Standard high-signal audit (or add --strict for full a11y/SEO checks)
 node dist/cli.js http://localhost:3000
-
-# 2. Or auto-start another project's dev server, audit it, and shut it down cleanly
-node dist/cli.js --cmd "npm run dev" --cwd ../my-app http://localhost:3000 --scan-source
-
-# 3. Static secret & source hygiene scan only (no browser needed)
-node dist/cli.js --scan-only --cwd ../my-app
 ```
 
-> **Tip:** Run `npm link` once inside the cloned `smokeproof/` folder so you can run `smokeproof http://localhost:3000` directly from any project directory.
+> **Tip:** Run `npm link` once inside the cloned `smokeproof/` folder so `smokeproof ...` works globally from any repository.
 
 ### Option B: Run via `npx` (Once published to npm)
 
 ```bash
+npx smokeproof chaos --cmd "npm run dev" http://localhost:3000 --scan-source
+npx smokeproof demo --cmd "npm run dev" http://localhost:3000
+npx smokeproof studio http://localhost:3000
 npx smokeproof http://localhost:3000
-npx smokeproof --cmd "npm run dev" http://localhost:3000 --scan-source
 ```
 
-### Machine-Readable Formats & Saved Artifacts
-
-```bash
-smokeproof http://localhost:3000 --json
-smokeproof http://localhost:3000 --markdown
-smokeproof http://localhost:3000 --sarif --out smokeproof.sarif
-```
-
-Every run writes artifacts to `.smokeproof/`:
-- `.smokeproof/smokeproof-report.json` — machine-readable findings, selectors, and fix suggestions
-- `.smokeproof/smokeproof-report.html` — self-contained visual report with embedded screenshots
-- `.smokeproof/screenshots/*.png` — annotated PNGs highlighting exact failing bounding boxes
+Outputs are saved automatically to `.smokeproof/`:
+- `.smokeproof/smokeproof-demo.gif` — Screen-Studio launch/README GIF
+- `.smokeproof/repro/*.gif` — Animated bug reproduction GIFs on chaos failures
+- `.smokeproof/smokeproof-report.html` — Visual report with embedded screenshots & Repro GIFs
+- `.smokeproof/smokeproof-report.json` — Machine-readable contract for agents
+- `.smokeproof/annotations.json` — Visual review pins from Studio
 
 ---
 
 ## Sample Output
-
-### Terminal Report
 
 ```text
 SmokeProof v0.1.0   FAIL   Score: 0/100
@@ -112,49 +124,23 @@ Routes: 1  | Findings: 10 (2 critical, 5 high, 2 medium, 1 low)
          Fix: Move private credentials to server-side environment variables and rotate the exposed key immediately.
 ```
 
-### JSON Output (`--json`)
-
-```json
-{
-  "summary": {
-    "score": 0,
-    "passed": false,
-    "routesAudited": 1,
-    "totalFindings": 10,
-    "bySeverity": { "critical": 2, "high": 5, "medium": 2, "low": 1 }
-  },
-  "sampleFindings": [
-    {
-      "severity": "high",
-      "rule": "asset/broken-image",
-      "viewport": "desktop",
-      "message": "Broken image failed to load: /assets/revenue-chart.png",
-      "selector": "img",
-      "suggestion": "Verify the image URL/path exists in public assets and returns HTTP 200."
-    }
-  ]
-}
-```
-
 ---
 
 ## Install as an Agent Skill
 
-Compatible with **Claude Code**, **Cursor**, **Antigravity**, **Codex**, and **Gemini CLI** via the [Agent Skills open standard](./skills/smokeproof/SKILL.md):
+Compatible with **Claude Code**, **Cursor**, **Antigravity**, **Codex**, and **Gemini CLI** via [skills/smokeproof/SKILL.md](./skills/smokeproof/SKILL.md):
 
 ```bash
 npx skills add md1qamar/smokeproof
 ```
 
-Once installed, your agent automatically runs static secret checks, crawls the live app across desktop and mobile, inspects annotated screenshots, fixes root causes, and re-verifies before marking the task complete.
-
 ---
 
-## MCP Server (Claude Code, Cursor, Antigravity, Codex)
+## MCP Server (8 Tools)
 
 ### Local Clone Config (Works immediately)
 
-Point your MCP client config (`claude_desktop_config.json`, `.cursor/mcp.json`, Antigravity MCP config, etc.) to your built `dist/cli.js`:
+Add SmokeProof to your MCP client (`claude_desktop_config.json`, `.cursor/mcp.json`, Antigravity MCP config, etc.) pointing to your built `dist/cli.js`:
 
 ```json
 {
@@ -180,25 +166,32 @@ Point your MCP client config (`claude_desktop_config.json`, `.cursor/mcp.json`, 
 }
 ```
 
-### Exposed MCP Tools
-
 | Tool | Purpose |
 | --- | --- |
-| `smokeproof_audit` | Full same-origin crawl across desktop & mobile with screenshots, interaction probing, and optional `--cmd` server wrapper |
-| `smokeproof_check_route` | Fast single-route deep inspection after editing a specific page |
-| `smokeproof_verify_fix` | Re-runs the audit and returns `{ resolved, remaining, introduced, passed, score }` |
-| `smokeproof_scan_source` | Instant static scan (no browser) for `.env` leaks, client-prefixed secrets, `dangerouslySetInnerHTML`, and hardcoded localhost URLs |
+| `smokeproof_chaos_test` | Fuzz forms, XSS, double-clicks & offline resilience + generate Repro GIFs |
+| `smokeproof_record_demo` | Record an auto-explored or scripted Screen-Studio demo GIF |
+| `smokeproof_get_annotations` | Fetch open visual pins & formatted prompt from SmokeProof Studio |
+| `smokeproof_resolve_annotation` | Mark a visual pin resolved after fixing it |
+| `smokeproof_audit` | Full same-origin crawl across desktop & mobile with annotated screenshots |
+| `smokeproof_check_route` | Fast single-route inspection after targeted edits |
+| `smokeproof_verify_fix` | Re-audit and return `{ resolved, remaining, introduced, passed, score }` |
+| `smokeproof_scan_source` | Instant static scan (no browser) for `.env` leaks, keys & unsafe HTML |
 
 ---
 
 ## CLI Reference
 
 ```text
-smokeproof <url> [options]
+smokeproof <url> [options]          Standard high-signal browser audit
+smokeproof chaos <url> [options]    Chaos bug-breaker + animated Repro GIF
+smokeproof demo <url> [options]     Screen-Studio demo GIF generator
+smokeproof studio <url> [options]   Click-to-Prompt visual review UI
 
-Options:
-  --cmd <command>          Start dev/preview server and shut down cleanly after audit
+Flags:
+  --cmd <command>          Start dev/preview server & tear down cleanly afterward
   --cwd <dir>              Target workspace directory (default: .)
+  --chaos                  Enable chaos form fuzzing, double-click & offline probes
+  --strict                 Include strict a11y/SEO & localhost advisory checks
   --max-pages <n>          Maximum same-origin routes to crawl (default: 12)
   --max-depth <n>          Maximum link crawl depth (default: 2)
   --timeout <ms>           Navigation/server startup timeout in ms (default: 15000)
@@ -206,48 +199,17 @@ Options:
   --no-interact            Skip safe interactive button/tab probing
   --no-screenshots         Skip saving annotated PNG screenshots
   --scan-source            Include static workspace secret/.env scan
-  --scan-only              Run static workspace scan only (no browser launch)
+  --scan-only              Run static workspace scan only (no browser)
+  --json | --markdown | --sarif | --html
+  --out <path>             Custom output path (report or .gif)
+  --artifacts-dir <dir>    Directory for screenshots, GIFs & reports (default: .smokeproof)
+  --browser-path <path>    Explicit Chrome/Edge/Chromium executable path
+  --port <port>            Studio UI port (default: 4180)
+  --no-open                Do not auto-open browser in studio mode
   --fail-on <level>        critical | high | medium | low | none (default: high)
   --min-score <0-100>      Minimum passing ship score (default: 70)
-  --json                   Output machine-readable JSON
-  --markdown               Output Markdown report
-  --sarif                  Output SARIF v2.1.0 JSON
-  --html                   Output self-contained HTML report
-  --out <path>             Write formatted output to a file
-  --artifacts-dir <dir>    Directory for screenshots & reports (default: .smokeproof)
-  --browser-path <path>    Explicit Chrome/Edge/Chromium executable path
-  --include <pattern>      Only crawl matching routes (repeatable)
-  --exclude <pattern>      Skip matching routes (repeatable)
-  --ignore-rule <ruleId>   Suppress a specific rule ID (repeatable)
   --mcp                    Start stdio MCP server
   --init                   Scaffold .smokeproof.json and GitHub Actions workflow
-```
-
----
-
-## Programmatic API
-
-```ts
-import { runSmokeAudit, verifySmokeFixes, scanWorkspaceSource } from 'smokeproof';
-
-const report = await runSmokeAudit('http://localhost:3000', {
-  maxPages: 10,
-  mobile: true,
-  interact: true,
-  scanSource: true,
-});
-
-console.log(`Score: ${report.summary.score}/100 (${report.summary.passed ? 'PASS' : 'FAIL'})`);
-```
-
----
-
-## Project Config (`.smokeproof.json`) & GitHub Actions
-
-Bootstrap configuration + CI workflow in one command:
-
-```bash
-smokeproof --init
 ```
 
 ---

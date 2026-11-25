@@ -4,7 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { runSmokeAudit, verifySmokeFixes } from '../src/index.js';
+import {
+  recordProductDemo,
+  runSmokeAudit,
+  startVisualStudio,
+  verifySmokeFixes,
+} from '../src/index.js';
 import { startBrokenFixtureServer, type TestServerHandle } from './fixtures/brokenServer.js';
 
 let fixture: TestServerHandle;
@@ -170,11 +175,113 @@ test('E2E: MCP server responds to initialize and tools/list over stdio', async (
     assert.ok(listResp?.result?.tools, 'MCP server should return registered tools');
     const names = listResp.result.tools.map((t) => t.name);
     assert.ok(names.includes('smokeproof_audit'));
+    assert.ok(names.includes('smokeproof_chaos_test'));
+    assert.ok(names.includes('smokeproof_record_demo'));
+    assert.ok(names.includes('smokeproof_get_annotations'));
+    assert.ok(names.includes('smokeproof_resolve_annotation'));
     assert.ok(names.includes('smokeproof_check_route'));
     assert.ok(names.includes('smokeproof_verify_fix'));
     assert.ok(names.includes('smokeproof_scan_source'));
   } finally {
     child.kill();
+  }
+});
+
+test('E2E: recordProductDemo produces a valid GIF89a Screen-Studio walkthrough', async () => {
+  const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-e2e-demo-'));
+  try {
+    const outGif = path.join(artifactsDir, 'demo.gif');
+    const demo = await recordProductDemo({
+      url: `${fixture.baseUrl}/clean`,
+      outPath: outGif,
+      artifactsDir,
+      fps: 8,
+    });
+    assert.ok(fs.existsSync(demo.gifPath));
+    assert.ok(demo.frameCount >= 6);
+    const header = fs.readFileSync(demo.gifPath).subarray(0, 6).toString('ascii');
+    assert.equal(header, 'GIF89a');
+  } finally {
+    fs.rmSync(artifactsDir, { recursive: true, force: true });
+  }
+});
+
+test('E2E: chaos mode catches XSS, fuzz crash, double-click race and creates animated Repro GIF', async () => {
+  const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-e2e-chaos-'));
+  try {
+    const report = await runSmokeAudit(`${fixture.baseUrl}/chaos-target`, {
+      maxPages: 1,
+      maxDepth: 0,
+      chaos: true,
+      interact: false,
+      mobile: false,
+      artifactsDir,
+      screenshots: true,
+    });
+    assert.equal(report.summary.passed, false);
+    const route = report.routes[0];
+    const rules = new Set(route.findings.map((f) => f.rule));
+    assert.ok(rules.has('chaos/xss-execution'), 'Should detect XSS execution in innerHTML sink');
+    assert.ok(rules.has('chaos/input-crash'), 'Should detect oversized input runtime crash');
+    assert.ok(rules.has('chaos/double-click-crash'), 'Should detect rapid double-click crash');
+    assert.ok(route.reproGif && fs.existsSync(route.reproGif), 'Should render animated chaos Repro GIF');
+    const header = fs.readFileSync(route.reproGif!).subarray(0, 6).toString('ascii');
+    assert.equal(header, 'GIF89a');
+  } finally {
+    fs.rmSync(artifactsDir, { recursive: true, force: true });
+  }
+});
+
+test('E2E: Visual Review Studio proxies target, injects bridge, and persists click-to-prompt annotations', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-e2e-studio-'));
+  const studio = await startVisualStudio({
+    url: `${fixture.baseUrl}/clean`,
+    cwd: tmpDir,
+    port: 0,
+    proxyPort: 0,
+    open: false,
+  });
+
+  try {
+    const uiRes = await fetch(studio.studioUrl);
+    assert.equal(uiRes.status, 200);
+    assert.match(await uiRes.text(), /SmokeProof Studio/);
+
+    const proxiedRes = await fetch(`${studio.proxyUrl}/clean`);
+    assert.equal(proxiedRes.status, 200);
+    assert.equal(proxiedRes.headers.get('x-frame-options'), null);
+    assert.match(await proxiedRes.text(), /__smokeproof_bridge\.js/);
+
+    const createRes = await fetch(`${studio.studioUrl}/api/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        route: '/clean',
+        selector: '#toggle-btn',
+        tagName: 'button',
+        textSnippet: 'Load Details',
+        comment: 'Make button primary indigo',
+        viewport: { width: 1440, height: 900 },
+        recentErrors: [],
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const createdJson = (await createRes.json()) as {
+      pin: { id: string; status: string };
+      prompt: string;
+    };
+    assert.equal(createdJson.pin.status, 'open');
+    assert.match(createdJson.prompt, /Make button primary indigo/);
+
+    const resolveRes = await fetch(`${studio.studioUrl}/api/annotations/${createdJson.pin.id}/resolve`, {
+      method: 'POST',
+    });
+    assert.equal(resolveRes.status, 200);
+    const resolvedJson = (await resolveRes.json()) as { updated: { status: string } };
+    assert.equal(resolvedJson.updated.status, 'resolved');
+  } finally {
+    await studio.stop();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 

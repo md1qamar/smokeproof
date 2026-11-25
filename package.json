@@ -1,7 +1,7 @@
 {
   "name": "smokeproof",
-  "version": "0.1.0",
-  "description": "Real-browser pre-ship verification for AI coding agents and humans. Catch silent runtime errors, broken mobile layouts, dead buttons, and leaked secrets before shipping.",
+  "version": "0.2.0",
+  "description": "Chaos browser testing, Screen-Studio demo & bug-repro GIFs, and Click-to-Prompt visual review for AI coding agents and humans.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "gifenc": "^1.0.3",
     "playwright-core": "^1.65.1",
     "zod": "^4.0.0"
   },
